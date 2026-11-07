@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#e4e5e7" />
+    <!-- Declaring dark support stops Chrome's Auto Dark Mode from force-darkening the light theme -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Unlock" />
+    <title>Unlock</title>
+    <base href="/unlock-play/" />
+    <script>
+        (function () {
+            let t = null;
+            try { t = localStorage.getItem('unlock.theme'); } catch { }
+            t = t || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.dataset.theme = t;
+            document.querySelector('meta[name=theme-color]').content = t === 'dark' ? '#0f1216' : '#e4e5e7';
+        })();
+    </script>
+    <link href="_framework/dotnet.cxvzfjz5n9.js" rel="preload" as="script" fetchpriority="high" crossorigin="anonymous" integrity="sha256-oGiqTJ5vDu2WLxzSGfjbcyeyO4qOwEVvNvOY+EttAdU=" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="icon" type="image/png" href="icon-192.png" />
+    <link href="manifest.webmanifest" rel="manifest" />
+    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
+    <script type="importmap">{
+  "imports": {
+    "./_framework/blazor.webassembly.js": "./_framework/blazor.webassembly.w3qd1tpl0e.js",
+    "./_framework/dotnet.js": "./_framework/dotnet.cxvzfjz5n9.js",
+    "./_framework/dotnet.native.js": "./_framework/dotnet.native.bjoj0wmylw.js",
+    "./_framework/dotnet.runtime.js": "./_framework/dotnet.runtime.5nc8i5dl74.js"
+  },
+  "scopes": {},
+  "integrity": {
+    "./_framework/blazor.webassembly.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
+    "./_framework/blazor.webassembly.w3qd1tpl0e.js": "sha256-lDXsDYFgm62F+YUvxES7IOTCXYpiHpU3uR45YdC6mq4=",
+    "./_framework/dotnet.cxvzfjz5n9.js": "sha256-oGiqTJ5vDu2WLxzSGfjbcyeyO4qOwEVvNvOY+EttAdU=",
+    "./_framework/dotnet.js": "sha256-oGiqTJ5vDu2WLxzSGfjbcyeyO4qOwEVvNvOY+EttAdU=",
+    "./_framework/dotnet.native.bjoj0wmylw.js": "sha256-CZ0IVZkLTIvee7n1yVvOitlJWNdj/YjaFgpMgliIM64=",
+    "./_framework/dotnet.native.js": "sha256-CZ0IVZkLTIvee7n1yVvOitlJWNdj/YjaFgpMgliIM64=",
+    "./_framework/dotnet.runtime.5nc8i5dl74.js": "sha256-/3dBg9sj1yLD3h0PDMHnNUXWs/2zWwIMEzom1Xz3Q40=",
+    "./_framework/dotnet.runtime.js": "sha256-/3dBg9sj1yLD3h0PDMHnNUXWs/2zWwIMEzom1Xz3Q40="
+  }
+}</script>
+</head>
+
+<body>
+    <div id="app"><div class="loading">🔒 Unlock</div></div>
+
+    <div id="blazor-error-ui">
+        Error.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+    <script>
+        // Dials: iOS-picker style 3D cylinders. JS owns drag/inertia; tells .NET only on snap.
+        window.lock = {
+            STEP: 24, FACES: 15, dials: [], ctx: null,
+            theme(t) {
+                document.documentElement.dataset.theme = t;
+                document.querySelector('meta[name=theme-color]').content = t === 'dark' ? '#0f1216' : '#e4e5e7';
+                try { localStorage.setItem('unlock.theme', t); } catch { }
+            },
+            sound() {
+                // Play tap: go fullscreen + lock landscape where supported (Android); iOS uses standalone PWA.
+                const de = document.documentElement;
+                if (!document.fullscreenElement && de.requestFullscreen)
+                    de.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation?.lock?.('landscape')).catch(() => { });
+                try {
+                    this.ctx = this.ctx || new (window.AudioContext || window.webkitAudioContext)();
+                    if (this.ctx.state === 'suspended') this.ctx.resume();
+                } catch { }
+            },
+            tone(freq, start, dur, type, vol) {
+                const c = this.ctx; if (!c) return;
+                const o = c.createOscillator(), g = c.createGain(), t = c.currentTime + start;
+                o.type = type; o.frequency.value = freq;
+                g.gain.setValueAtTime(0.0001, t);
+                g.gain.exponentialRampToValueAtTime(vol, t + 0.005);
+                g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+                o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur);
+            },
+            click() { this.tone(1800, 0, 0.03, 'square', 0.04); },
+            win(last) {
+                this.tone(660, 0, 0.15, 'triangle', 0.25); this.tone(990, 0.1, 0.5, 'sine', 0.3);
+                if (last) this.tone(1320, 0.3, 0.9, 'sine', 0.3);
+                navigator.vibrate?.(last ? [60, 50, 160] : 60);
+            },
+            init(net, body, starts) {
+                this.net = net;
+                this.body = body;
+                this.dials.forEach(d => d.stop = true);
+                this.dials = [...body.querySelectorAll('.dial')].map((el, i) => this.dial(el, i, starts[i]));
+                this.fit();
+                if (!this.onResize) addEventListener('resize', this.onResize = () => this.fit());
+            },
+            // One font size for the whole lock: largest (up to the CSS default) where every name
+            // fits its dial width (no word cropped) in at most 2 lines.
+            fit() {
+                const body = this.body;
+                if (!body?.isConnected) return;
+                const spans = [...body.querySelectorAll('.face span')];
+                if (!spans.length) return;
+                body.style.removeProperty('--fs');
+                const base = parseFloat(getComputedStyle(spans[0]).fontSize);
+                const ok = fs => {
+                    body.style.setProperty('--fs', fs + 'px');
+                    return spans.every(s => s.scrollWidth <= s.clientWidth + 0.5
+                        && s.scrollHeight <= Math.min(fs * 1.2 * 2, s.parentElement.clientHeight) + 1);
+                };
+                if (ok(base)) return;
+                let lo = 8, hi = base;
+                while (hi - lo > 0.25) { const m = (lo + hi) / 2; if (ok(m)) lo = m; else hi = m; }
+                body.style.setProperty('--fs', lo + 'px');
+            },
+            dial(el, idx, start) {
+                const L = this, cyl = el.querySelector('.cyl');
+                const d = { a: start * L.STEP, v: 0, raf: 0, face: start, stop: false };
+                const H = () => el.querySelector('.face').offsetHeight || 40;
+                const draw = () => {
+                    cyl.style.transform = `rotateX(${d.a}deg)`;
+                    const f = ((Math.round(d.a / L.STEP) % L.FACES) + L.FACES) % L.FACES;
+                    if (f !== d.cur) { if (d.cur !== undefined) L.click(); d.cur = f; }
+                };
+                const settle = () => {
+                    const target = Math.round(d.a / L.STEP) * L.STEP;
+                    const from = d.a, t0 = performance.now();
+                    const step = now => {
+                        if (d.stop) return;
+                        const k = Math.min(1, (now - t0) / 180);
+                        d.a = from + (target - from) * (1 - Math.pow(1 - k, 3)); draw();
+                        if (k < 1) d.raf = requestAnimationFrame(step);
+                        else {
+                            const f = ((Math.round(d.a / L.STEP) % L.FACES) + L.FACES) % L.FACES;
+                            if (f !== d.face) { d.face = f; L.net.invokeMethodAsync('Snap', idx, f); }
+                        }
+                    };
+                    d.raf = requestAnimationFrame(step);
+                };
+                const coast = () => {
+                    let prev = performance.now();
+                    const step = now => {
+                        if (d.stop) return;
+                        const dt = Math.min(32, now - prev); prev = now;
+                        d.a += d.v * dt; d.v *= Math.pow(0.994, dt); draw();
+                        if (Math.abs(d.v) > 0.02) d.raf = requestAnimationFrame(step); else settle();
+                    };
+                    d.raf = requestAnimationFrame(step);
+                };
+                const goTo = n => { cancelAnimationFrame(d.raf); d.a = Math.round(d.a / L.STEP) * L.STEP + n * L.STEP; settle(); };
+                let drag = null;
+                el.onpointerdown = e => {
+                    if (document.querySelector('.lock.open')) return;
+                    cancelAnimationFrame(d.raf);
+                    el.setPointerCapture(e.pointerId);
+                    drag = { y: e.clientY, y0: e.clientY, t: performance.now(), moved: 0 };
+                    d.v = 0;
+                };
+                el.onpointermove = e => {
+                    if (!drag) return;
+                    const dy = e.clientY - drag.y, now = performance.now();
+                    const da = -dy * L.STEP / H();
+                    d.a += da; draw();
+                    const dt = Math.max(1, now - drag.t);
+                    d.v = 0.7 * (da / dt) + 0.3 * d.v;
+                    drag.y = e.clientY; drag.t = now; drag.moved += Math.abs(dy);
+                };
+                el.onpointerup = el.onpointercancel = e => {
+                    if (!drag) return;
+                    const tap = drag.moved < 6;
+                    if (performance.now() - drag.t > 80) d.v = 0;
+                    drag = null;
+                    if (tap) {
+                        const r = el.getBoundingClientRect();
+                        goTo(Math.round((e.clientY - (r.top + r.height / 2)) / H()));
+                    } else if (Math.abs(d.v) > 0.05) coast(); else settle();
+                };
+                let acc = 0;
+                el.onwheel = e => {
+                    e.preventDefault();
+                    if (document.querySelector('.lock.open')) return;
+                    acc += e.deltaY;
+                    if (Math.abs(acc) >= 40) { goTo(Math.sign(acc)); acc = 0; }
+                };
+                el.onkeydown = e => {
+                    if (e.key === 'ArrowDown') { e.preventDefault(); goTo(1); }
+                    if (e.key === 'ArrowUp') { e.preventDefault(); goTo(-1); }
+                    if (e.key === 'ArrowRight') el.nextElementSibling?.focus();
+                    if (e.key === 'ArrowLeft') el.previousElementSibling?.focus();
+                };
+                draw();
+                return d;
+            }
+        };
+    </script>
+    <script src="_framework/blazor.webassembly.w3qd1tpl0e.js"></script>
+    <script>navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' });</script>
+</body>
+
+</html>
